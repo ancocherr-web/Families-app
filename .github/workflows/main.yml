@@ -8,8 +8,14 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
       - uses: subosito/flutter-action@v2
         with:
@@ -18,23 +24,23 @@ jobs:
       - name: Create Android project skeleton
         run: flutter create --platforms=android --org com.families --project-name families_app .
 
-      - name: Add location permissions
+      - name: Add permissions and set minSdk
         run: |
           python3 - << 'PY'
-          import re
+          import re, glob
           p = 'android/app/src/main/AndroidManifest.xml'
           s = open(p, encoding='utf-8').read()
-          perms = ('<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>\n'
-                   '    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>\n    ')
           if 'ACCESS_FINE_LOCATION' not in s:
+              perms = ('<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>\n'
+                       '    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>\n    ')
               s = re.sub(r'(<manifest[^>]*>\s*)', lambda m: m.group(1) + '    ' + perms, s, count=1)
-          open(p, 'w', encoding='utf-8').write(s)
+              open(p, 'w', encoding='utf-8').write(s)
+          for g in glob.glob('android/app/build.gradle*'):
+              t = open(g, encoding='utf-8').read()
+              t = re.sub(r'minSdk\s*=?\s*flutter\.minSdkVersion', 'minSdk = 21', t)
+              t = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 21', t)
+              open(g, 'w', encoding='utf-8').write(t)
           PY
-
-      - name: Set minSdk
-        run: |
-          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/' android/app/build.gradle* || true
-          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/' android/app/build.gradle* || true
 
       - run: flutter pub get
 
@@ -44,3 +50,4 @@ jobs:
         with:
           name: families-app-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
